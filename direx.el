@@ -150,6 +150,12 @@
 (defmethod direx:node-children (node)
   nil)
 
+(defgeneric direx:node-parent (node)
+  "Returns the parent of the NODE.")
+
+(defmethod direx:node-parent (node)
+  nil)
+
 (defgeneric direx:node-contains (node descendant)
   "Returns t if the NODE has the DESCENDANT. The default
 implementation of this generic function uses
@@ -198,6 +204,9 @@ descendants. You may add a heuristic method for speed.")
 (defun direx:make-item-children (item)
   (cl-loop for child-tree in (direx:node-children (direx:item-tree item))
            collect (direx:make-item child-tree item)))
+
+(defun direx:make-item-parent (item)
+  (direx:node-parent (direx:item-tree item)))
 
 (defun direx:item-equals (x y)
   (direx:tree-equals (direx:item-tree x) (direx:item-tree y)))
@@ -434,6 +443,11 @@ mouse-2: find this node in other window"))
                               file-list)
       (goto-char (point-min))
       (buffer-substring-no-properties (point) (line-end-position)))))
+
+(defmethod direx:node-parent ((file direx:file))
+  (let ((parent (file-name-directory (directory-file-name (direx:file-full-name file)))))
+    (when (and parent (file-directory-p parent))
+      (direx:make-directory parent))))
 
 (defclass direx:regular-file (direx:file direx:leaf)
   ())
@@ -805,7 +819,14 @@ mouse-2: find this node in other window"))
 (defun direx:up-item ()
   (interactive)
   (direx:aif (direx:item-at-point)
-      (direx:up-item-1 it)
+      (when (eq (point)
+                (progn (direx:up-item-1 it) (point)))
+        (direx:aif (direx:make-item-parent it)
+            (let ((buffer-read-only nil))
+              (erase-buffer)
+              (direx:add-root-into-buffer it (current-buffer))
+              (rename-buffer (direx:tree-name it) t))
+          (error "No parent")))
     (goto-char (point-min))))
 
 (defun direx:down-item ()
